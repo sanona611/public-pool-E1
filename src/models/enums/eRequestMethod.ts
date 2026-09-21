@@ -4,4 +4,5 @@ export enum eRequestMethod {
     AUTHORIZE = 'mining.authorize',
     SUGGEST_DIFFICULTY = 'mining.suggest_difficulty',
     SUBMIT = 'mining.submit',
+	SET_EXTRANONCE = 'miner.set_extranonce',
 }

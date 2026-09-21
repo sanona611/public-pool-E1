@@ -53,6 +53,7 @@ export class StratumV1Client {
     private creatingEntity: Promise<void>;
 
     public extraNonceAndSessionId: string;
+	public extraNonce1: string;
     public sessionStart: Date;
     public noFee: boolean;
     public hashRate: number = 0;
@@ -302,6 +303,32 @@ export class StratumV1Client {
                 }
                 break;
             }
+			case eRequestMethod.SET_EXTRANONCE: {
+				const extranonce1 = parsedMessage.params?.[0];
+				
+				if (
+					typeof extranonce1 !== 'string' ||
+					!/^[0-9a-fA-F]{8}$/.test(extranonce1)
+				) {
+					console.error(`Invalid miner.set_extranonce value: ${extranonce1}`);
+					return;
+				}
+				this.extraNonce1 = extranonce1.toLowerCase();
+				
+				console.log(`Miner-controlled extranonce1: ${this.extraNonce1}`);
+				
+				if (parsedMessage.id != null) {
+					await this.write(JSON.stringify({
+						id: parsedMessage.id,
+						error: null,
+						result: true
+					}) + '\n');
+				}
+				
+				break;
+			}
+			
+			
             case eRequestMethod.SUBMIT: {
 
                 if (this.stratumInitialized == false) {
@@ -451,7 +478,8 @@ export class StratumV1Client {
             network,
             this.stratumV1JobsService.getNextId(),
             payoutInformation,
-            jobTemplate
+            jobTemplate,
+			this.extraNonce1
         );
 
         this.stratumV1JobsService.addJob(job);
@@ -551,7 +579,7 @@ export class StratumV1Client {
             jobTemplate,
             versionMask,
             nonce,
-            this.extraNonceAndSessionId,
+            job.extraNonce1,
             submission.extraNonce2,
             timestamp
         );
@@ -572,7 +600,7 @@ export class StratumV1Client {
                     jobTemplate,
                     versionMask,
                     nonce,
-                    this.extraNonceAndSessionId,
+                    job.extraNonce1,
                     submission.extraNonce2,
                     timestamp
                 );

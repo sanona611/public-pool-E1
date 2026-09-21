@@ -25,15 +25,17 @@ export class MiningJob {
     public jobTemplateId: string;
     public networkDifficulty: number;
     public creation: number;
+	public extraNonce1: string;
 
     constructor(
         configService: ConfigService,
         private network: bitcoinjs.networks.Network,
         public jobId: string,
         payoutInformation: AddressObject[],
-        jobTemplate: IJobTemplate
+        jobTemplate: IJobTemplate,
+		extraNonce1: string
     ) {
-
+		this.extraNonce1 = extraNonce1;
         this.creation = new Date().getTime();
         this.jobTemplateId = jobTemplate.blockData.id;
         this.merkleBranchBuffers = jobTemplate.merkle_branch.map(branch => Buffer.from(branch, 'hex'));
