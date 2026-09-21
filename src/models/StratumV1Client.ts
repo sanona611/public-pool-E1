@@ -53,7 +53,7 @@ export class StratumV1Client {
     private creatingEntity: Promise<void>;
 
     public extraNonceAndSessionId: string;
-	public extraNonce1: string;
+	public extraNonce1: string = null;
     public sessionStart: Date;
     public noFee: boolean;
     public hashRate: number = 0;
@@ -161,6 +161,9 @@ export class StratumV1Client {
                         this.sessionStart = new Date();
                         this.statistics = new StratumV1ClientStatistics(this.clientStatisticsService);
                         this.extraNonceAndSessionId = this.getRandomHexString();
+						if (this.extraNonce1 == null) {
+							this.extraNonce1 = this.extraNonceAndSessionId.substring(0, 8);
+						}
                         console.log(`New client ID: : ${this.extraNonceAndSessionId}, ${this.socket.remoteAddress}:${this.socket.remotePort}`);
                     }
 
@@ -305,18 +308,39 @@ export class StratumV1Client {
             }
 			case eRequestMethod.SET_EXTRANONCE: {
 				const extranonce1 = parsedMessage.params?.[0];
-				
 				if (
 					typeof extranonce1 !== 'string' ||
 					!/^[0-9a-fA-F]{8}$/.test(extranonce1)
 				) {
-					console.error(`Invalid miner.set_extranonce value: ${extranonce1}`);
+					console.error(
+						`Invalid miner.set_extranonce value: ${extranonce1}`
+					);
 					return;
 				}
-				this.extraNonce1 = extranonce1.toLowerCase();
-				
-				console.log(`Miner-controlled extranonce1: ${this.extraNonce1}`);
-				
+				const newExtraNonce1 = extranonce1.toLowerCase();
+				if (this.extraNonce1 === newExtraNonce1) {
+					console.log(
+						`Miner sent unchanged extranonce1: ${newExtraNonce1}`
+					);
+				} else {
+					this.extraNonce1 = newExtraNonce1;
+					console.log(
+						`Miner-controlled extranonce1 changed to: ${this.extraNonce1}`
+					);
+					if (this.stratumInitialized === true) {
+						const jobTemplate = await firstValueFrom(
+							this.stratumV1JobsService.newMiningJob$
+						);
+						const refreshedJobTemplate: IJobTemplate = {
+							...jobTemplate,
+							blockData: {
+								...jobTemplate.blockData,
+								clearJobs: true
+							}
+						};
+						await this.sendNewMiningJob(refreshedJobTemplate);
+					}
+				}
 				if (parsedMessage.id != null) {
 					await this.write(JSON.stringify({
 						id: parsedMessage.id,
@@ -324,11 +348,8 @@ export class StratumV1Client {
 						result: true
 					}) + '\n');
 				}
-				
 				break;
 			}
-			
-			
             case eRequestMethod.SUBMIT: {
 
                 if (this.stratumInitialized == false) {
@@ -472,7 +493,14 @@ export class StratumV1Client {
         } else {
             throw new Error('Invalid network configuration');
         }
-
+		if (
+			typeof this.extraNonce1 !== 'string' ||
+			!/^[0-9a-fA-F]{8}$/.test(this.extraNonce1)
+		) {
+			throw new Error(
+				`Cannot create mining job: invalid extranonce1: ${this.extraNonce1}`
+			);
+		}
         const job = new MiningJob(
             this.configService,
             network,

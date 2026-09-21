@@ -35,7 +35,15 @@ export class MiningJob {
         jobTemplate: IJobTemplate,
 		extraNonce1: string
     ) {
-		this.extraNonce1 = extraNonce1;
+		if (
+			typeof extraNonce1 !== 'string' ||
+			!/^[0-9a-fA-F]{8}$/.test(extraNonce1)
+		) {
+			throw new Error(
+				`Invalid extranonce1 in MiningJob: ${extraNonce1}`
+			);
+		}
+		this.extraNonce1 = extraNonce1.toLowerCase();
         this.creation = new Date().getTime();
         this.jobTemplateId = jobTemplate.blockData.id;
         this.merkleBranchBuffers = jobTemplate.merkle_branch.map(branch => Buffer.from(branch, 'hex'));
@@ -103,7 +111,25 @@ export class MiningJob {
     }
 
     public buildHeaderBuffer(jobTemplate: IJobTemplate, versionMask: number, nonce: number, extraNonce: string, extraNonce2: string, timestamp: number): Buffer {
-        const coinbaseBuffer = Buffer.concat([
+        if (
+			typeof extraNonce !== 'string' ||
+			!/^[0-9a-fA-F]+$/.test(extraNonce) ||
+			extraNonce.length !== 8
+		) {
+			throw new Error(
+				`Invalid extranonce1 in buildHeaderBuffer: ${extraNonce}`
+			);
+		}
+		if (
+			typeof extraNonce2 !== 'string' ||
+			!/^[0-9a-fA-F]+$/.test(extraNonce2) ||
+			extraNonce2.length % 2 !== 0
+		) {
+			throw new Error(
+				`Invalid extranonce2 in buildHeaderBuffer: ${extraNonce2}`
+			);
+		}
+		const coinbaseBuffer = Buffer.concat([
             this.coinbasePart1Buffer,
             Buffer.from(`${extraNonce}${extraNonce2}`, 'hex'),
             this.coinbasePart2Buffer,
