@@ -61,6 +61,7 @@ export class StratumV1Client {
     private buffer: string = '';
     private connectionClosed = false;
     private lastSentMiningJobTimestamp: number = null;
+	private latestJobTemplate: IJobTemplate = null;
 
     private miningSubmissionHashes = new Set<string>()
 
@@ -328,16 +329,21 @@ export class StratumV1Client {
 						`Miner-controlled extranonce1 changed to: ${this.extraNonce1}`
 					);
 					if (this.stratumInitialized === true) {
-						const jobTemplate = await firstValueFrom(
-							this.stratumV1JobsService.newMiningJob$
-						);
+						if (this.latestJobTemplate == null) {
+							console.error(
+								'Cannot create new job: latest job template is not available'
+							);
+							break;
+						}
+
 						const refreshedJobTemplate: IJobTemplate = {
-							...jobTemplate,
+							...this.latestJobTemplate,
 							blockData: {
-								...jobTemplate.blockData,
+								...this.latestJobTemplate.blockData,
 								clearJobs: true
 							}
 						};
+
 						await this.sendNewMiningJob(refreshedJobTemplate);
 					}
 				}
@@ -440,16 +446,19 @@ export class StratumV1Client {
         }
 
         this.stratumSubscription = this.stratumV1JobsService.newMiningJob$.subscribe(async (jobTemplate) => {
-            try {
-                if(jobTemplate.blockData.clearJobs){
-                    this.miningSubmissionHashes.clear();
-                }
-                await this.sendNewMiningJob(jobTemplate);
-            } catch (e) {
-                await this.socket.end();
-                console.error(e);
-            }
-        });
+			try {
+				this.latestJobTemplate = jobTemplate;
+
+				if (jobTemplate.blockData.clearJobs) {
+					this.miningSubmissionHashes.clear();
+				}
+
+				await this.sendNewMiningJob(jobTemplate);
+			} catch (e) {
+				await this.socket.end();
+				console.error(e);
+			}
+		});
 
         this.backgroundWork.push(
             setInterval(async () => {
@@ -509,7 +518,12 @@ export class StratumV1Client {
             jobTemplate,
 			this.extraNonce1
         );
-
+		console.log(
+			`[JOB CREATED] jobId=${job.jobId}, ` +
+			`templateId=${job.jobTemplateId}, ` +
+			`E1=${job.extraNonce1}, ` +
+			`clearJobs=${jobTemplate.blockData.clearJobs}`
+		);
         this.stratumV1JobsService.addJob(job);
 
 
@@ -563,6 +577,14 @@ export class StratumV1Client {
             }
             return false;
         }
+		console.log(
+			`[SUBMIT] jobId=${submission.jobId}, ` +
+			`jobE1=${job.extraNonce1}, ` +
+			`currentE1=${this.extraNonce1}, ` +
+			`E2=${submission.extraNonce2}, ` +
+			`ntime=${submission.ntime}, ` +
+			`nonce=${submission.nonce}`
+		);
         const jobTemplate = this.stratumV1JobsService.getJobTemplateById(job.jobTemplateId);
 
         if (jobTemplate == null) {
@@ -611,6 +633,12 @@ export class StratumV1Client {
             submission.extraNonce2,
             timestamp
         );
+		console.log(
+			`[HEADER] jobId=${submission.jobId}, ` +
+			`E1=${job.extraNonce1}, ` +
+			`E2=${submission.extraNonce2}, ` +
+			`header=${header.toString('hex')}`
+		);
         const { submissionDifficulty } = this.calculateDifficulty(header);
 
         //console.log(`DIFF: ${submissionDifficulty} of ${this.sessionDifficulty} from ${this.clientAuthorization.worker + '.' + this.extraNonceAndSessionId}`);
